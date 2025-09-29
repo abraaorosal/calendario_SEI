@@ -34,6 +34,7 @@ function App() {
   const [visiblePrograms, setVisiblePrograms] = useState<Set<string>>(
     () => new Set(programDefinitions.map((item) => item.program)),
   );
+  const [isMobile, setIsMobile] = useState(false);
   const hideTimer = useRef<number | null>(null);
 
   const months = useMemo(() => {
@@ -106,6 +107,20 @@ function App() {
     }
   }, [activeCourse, visiblePrograms]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(max-width: 720px)');
+    const updateMatch = () => setIsMobile(mediaQuery.matches);
+
+    updateMatch();
+    mediaQuery.addEventListener('change', updateMatch);
+
+    return () => mediaQuery.removeEventListener('change', updateMatch);
+  }, []);
+
   const toggleProgram = (program: string) => {
     setVisiblePrograms((prev) => {
       const next = new Set(prev);
@@ -121,6 +136,12 @@ function App() {
   const resetFilters = () => {
     setVisiblePrograms(new Set(programDefinitions.map((item) => item.program)));
   };
+
+  const idleTitle = isMobile ? 'Toque em um curso' : 'Passe o cursor sobre um curso';
+  const idleSubtitle = isMobile
+    ? 'Abra um card para visualizar os detalhes completos.'
+    : 'Toque ou focalize um item para ver detalhes.';
+  const idleCaption = 'As datas exibem início, término e duração estimada.';
 
   return (
     <div className="app-shell">
@@ -191,39 +212,87 @@ function App() {
       </section>
 
       <section className="calendar-card" aria-label="Calendário de cursos">
-        <div className="month-headers">
-          {months.map((month) => (
-            <div key={month.label} className="month-header" style={{ width: `${month.width}%` }}>
-              {month.label}
-            </div>
-          ))}
-        </div>
-
-        <div className="timeline-wrapper">
-          <div className="timeline-grid" aria-hidden="true">
+        {!isMobile && (
+          <div className="month-headers">
             {months.map((month) => (
-              <div
-                key={`grid-${month.label}`}
-                className="timeline-grid-segment"
-                style={{ width: `${month.width}%` }}
-              >
-                <span className="timeline-grid-label">{month.label}</span>
+              <div key={month.label} className="month-header" style={{ width: `${month.width}%` }}>
+                {month.label}
               </div>
             ))}
           </div>
+        )}
 
-          <div className="gantt-chart">
-            {filteredCourses.length === 0 ? (
-              <div className="empty-state">
-                Nenhum curso corresponde aos filtros aplicados.
-              </div>
-            ) : (
-              filteredCourses.map((course) => {
+        <div className={`timeline-wrapper ${isMobile ? 'is-mobile' : ''}`}>
+          {!isMobile && (
+            <div className="timeline-grid" aria-hidden="true">
+              {months.map((month) => (
+                <div
+                  key={`grid-${month.label}`}
+                  className="timeline-grid-segment"
+                  style={{ width: `${month.width}%` }}
+                >
+                  <span className="timeline-grid-label">{month.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {filteredCourses.length === 0 ? (
+            <div className="empty-state">Nenhum curso corresponde aos filtros aplicados.</div>
+          ) : isMobile ? (
+            <div className="mobile-course-list">
+              {filteredCourses.map((course) => {
                 const startOffset = course.startDate.getTime() - timelineStart.getTime();
                 const duration = course.endDate.getTime() - course.startDate.getTime();
                 const leftPercent = (startOffset / totalDurationMs) * 100;
                 const widthPercent = (duration / totalDurationMs) * 100;
                 const isActive = activeCourse?.name === course.name;
+                const durationDays = diffInDays(course.startDate, course.endDate);
+                const adjustedWidth = Math.min(widthPercent, Math.max(0, 100 - leftPercent));
+
+                return (
+                  <button
+                    type="button"
+                    key={`${course.program}-${course.start}-mobile`}
+                    className={`mobile-course-card ${isActive ? 'is-active' : ''}`}
+                    onClick={() => handleShowCourse(course)}
+                    onFocus={() => handleShowCourse(course)}
+                  >
+                    <div className="mobile-course-header">
+                      <span className="mobile-course-program" style={{ backgroundColor: course.color }}>
+                        {course.program}
+                      </span>
+                      <span className="mobile-course-duration">{durationDays} dias</span>
+                    </div>
+                    <p className="mobile-course-name">{course.name}</p>
+                    <div className="mobile-course-track">
+                      <span className="mobile-track-axis" />
+                      <span
+                        className="mobile-track-fill"
+                        style={{
+                          backgroundColor: course.color,
+                          left: `${leftPercent}%`,
+                          width: `${adjustedWidth}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="mobile-course-footer">
+                      <span>Início {formatDate(course.startDate)}</span>
+                      <span>Término {formatDate(course.endDate)}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="gantt-chart">
+              {filteredCourses.map((course) => {
+                const startOffset = course.startDate.getTime() - timelineStart.getTime();
+                const duration = course.endDate.getTime() - course.startDate.getTime();
+                const leftPercent = (startOffset / totalDurationMs) * 100;
+                const widthPercent = (duration / totalDurationMs) * 100;
+                const isActive = activeCourse?.name === course.name;
+                const adjustedWidth = Math.min(widthPercent, Math.max(0, 100 - leftPercent));
 
                 return (
                   <div key={`${course.program}-${course.start}`} className={`course-row ${isActive ? 'is-active' : ''}`}>
@@ -235,7 +304,7 @@ function App() {
                         style={{
                           backgroundColor: course.color,
                           left: `${leftPercent}%`,
-                          width: `${widthPercent}%`,
+                          width: `${adjustedWidth}%`,
                           color: course.textColor ?? '#f8fafc',
                         }}
                         onMouseEnter={() => handleShowCourse(course)}
@@ -253,9 +322,9 @@ function App() {
                     </div>
                   </div>
                 );
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )}
         </div>
       </section>
 
@@ -272,9 +341,9 @@ function App() {
           </>
         ) : (
           <>
-            <p className="info-title">Passe o cursor sobre um curso</p>
-            <p className="info-dates">Toque ou focalize um item para ver detalhes.</p>
-            <p className="info-program">As datas exibem início, término e duração estimada.</p>
+            <p className="info-title">{idleTitle}</p>
+            <p className="info-dates">{idleSubtitle}</p>
+            <p className="info-program">{idleCaption}</p>
           </>
         )}
       </aside>

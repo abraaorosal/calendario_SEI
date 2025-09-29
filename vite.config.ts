@@ -1,6 +1,7 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite'
+// import react from '@vitejs/plugin-react' // se seu app usa React, descomente e instale o plugin
 
 export default defineConfig({
-  plugins: [react()],
-});
+  base: '/calendario_SEI/',
+  // plugins: [react()],
+})
